@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -118,80 +117,5 @@ func getDefaultPrinter() (string, error) {
 
 	default:
 		return "", fmt.Errorf("sistema operacional não suportado: %s", runtime.GOOS)
-	}
-}
-
-func printToOS(printerName, content string) error {
-	switch runtime.GOOS {
-	case "darwin", "linux":
-		var cmd *exec.Cmd
-
-		// Se for "default", usa impressora padrão do sistema
-		if printerName == "default" {
-			defaultPrinter, err := getDefaultPrinter()
-			if err != nil {
-				// Se não conseguir obter o nome, usa lp sem -d (imprime na padrão automaticamente)
-				log.Printf("Aviso: não foi possível obter nome da impressora padrão (%v), usando lp sem especificar impressora (usará padrão do sistema)", err)
-				cmd = exec.Command("lp")
-			} else {
-				log.Printf("Impressora padrão detectada: %s", defaultPrinter)
-				cmd = exec.Command("lp", "-d", defaultPrinter)
-			}
-		} else {
-			// Impressora específica
-			cmd = exec.Command("lp", "-d", printerName)
-		}
-
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			return err
-		}
-		if _, err := stdin.Write([]byte(content)); err != nil {
-			stdin.Close()
-			return err
-		}
-		stdin.Close()
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("erro ao imprimir via lp: %v | stderr: %s", err, stderr.String())
-		}
-		return nil
-
-	case "windows":
-		var printerToUse string
-
-		// Se for "default", obtém a impressora padrão
-		if printerName == "default" {
-			defaultPrinter, err := getDefaultPrinter()
-			if err != nil {
-				return fmt.Errorf("não foi possível obter impressora padrão: %v", err)
-			}
-			printerToUse = defaultPrinter
-			log.Printf("Impressora padrão detectada: %s", printerToUse)
-		} else {
-			printerToUse = printerName
-		}
-
-		// Out-Printer lê do stdin
-		cmd := exec.Command("powershell", "-Command", "Out-Printer -Name '"+printerToUse+"'")
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			return err
-		}
-		if _, err := stdin.Write([]byte(content)); err != nil {
-			stdin.Close()
-			return err
-		}
-		stdin.Close()
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("erro ao imprimir via Out-Printer: %v | stderr: %s", err, stderr.String())
-		}
-		return nil
-
-	default:
-		return fmt.Errorf("sistema operacional não suportado: %s", runtime.GOOS)
 	}
 }
