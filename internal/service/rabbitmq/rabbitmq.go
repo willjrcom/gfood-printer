@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -19,45 +20,62 @@ type RabbitMQ struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
 	url     string
+	mu      sync.Mutex
 }
 
 // NewInstance creates and returns a new instance of RabbitMQ with retries
 func NewInstance(url string) (*RabbitMQ, error) {
-	var conn *amqp.Connection
-	var ch *amqp.Channel
-	var err error
+	r := &RabbitMQ{url: url}
+	if err := r.connect(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
 
-	// Try to connect and create a channel with retries
+// connect handles the actual connection and channel creation with retries
+func (r *RabbitMQ) connect() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var err error
 	for i := 0; i < 5; i++ {
-		conn, err = amqp.Dial(url)
+		r.conn, err = amqp.Dial(r.url)
 		if err == nil {
-			ch, err = conn.Channel()
+			r.channel, err = r.conn.Channel()
 			if err == nil {
-				break
+				log.Println("Successfully connected to RabbitMQ")
+				return nil
 			}
-			conn.Close()
+			r.conn.Close()
 		}
 		log.Printf("Retrying RabbitMQ connection (attempt %d/5)...", i+1)
 		time.Sleep(2 * time.Second)
 	}
 
-	// If we failed to connect after retries
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to RabbitMQ: %s", err)
-	}
+	return fmt.Errorf("failed to connect to RabbitMQ after retries: %v", err)
+}
 
-	return &RabbitMQ{
-		conn:    conn,
-		channel: ch,
-		url:     url,
-	}, nil
+// reconnectIfClosed checks if connection or channel is closed and reconnects if necessary
+func (r *RabbitMQ) reconnectIfClosed() error {
+	if r.conn == nil || r.conn.IsClosed() || r.channel == nil {
+		log.Println("RabbitMQ connection closed, attempting to reconnect...")
+		return r.connect()
+	}
+	return nil
 }
 
 // EnsureExchangeQueueAndBind ensures the exchange, queue, and binding exist
 func (r *RabbitMQ) EnsureExchangeQueueAndBind(exchange, routingKey string) error {
+	if err := r.reconnectIfClosed(); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	// Names for Exchange and Queue
-	exchangeName := fmt.Sprintf("%s_exchange", exchange)          // Example: empresa_123_exchange
-	queueName := fmt.Sprintf("%s_%s_queue", exchange, routingKey) // Example: empresa_123_impressao.pedido_queue
+	exchangeName := fmt.Sprintf("%s_exchange", exchange)
+	queueName := fmt.Sprintf("%s_%s_queue", exchange, routingKey)
 
 	// Declare the Exchange (direct type)
 	err := r.channel.ExchangeDeclare(
@@ -109,6 +127,9 @@ func (r *RabbitMQ) ConsumeMessages(exchange, routingKey string) (<-chan amqp.Del
 		return nil, fmt.Errorf("failed to ensure exchange, queue and binding: %s", err)
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	// Start consuming messages from the queue
 	queueName := fmt.Sprintf("%s_%s_queue", exchange, routingKey)
 	msgs, err := r.channel.Consume(
@@ -129,6 +150,9 @@ func (r *RabbitMQ) ConsumeMessages(exchange, routingKey string) (<-chan amqp.Del
 
 // Close closes the RabbitMQ connection and channel
 func (r *RabbitMQ) Close() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if r.channel != nil {
 		if err := r.channel.Close(); err != nil {
 			log.Printf("Error closing channel: %s", err)
@@ -143,5 +167,7 @@ func (r *RabbitMQ) Close() {
 
 // NotifyClose registers a listener for close events
 func (r *RabbitMQ) NotifyClose(c chan *amqp.Error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.conn.NotifyClose(c)
 }
