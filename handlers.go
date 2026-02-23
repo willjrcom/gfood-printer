@@ -87,9 +87,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			printerName, _ := dataMap["printer"].(string)
-			if printerName == "" {
-				printerName = "default"
-			}
+			printerName = resolvePrinterName(printerName)
 
 			// Envia para impressão
 			log.Printf("WebSocket: Solicitando impressão na impressora [%s] (tamanho texto: %d)", printerName, len(text))

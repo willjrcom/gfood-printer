@@ -3,10 +3,33 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os/exec"
 	"runtime"
 	"strings"
 )
+
+// resolvePrinterName verifica se a impressora existe, caso contrário retorna "default"
+func resolvePrinterName(requestedName string) string {
+	if requestedName == "" || requestedName == "default" {
+		return "default"
+	}
+
+	printers, err := getPrinters()
+	if err != nil {
+		log.Printf("Fallback: Erro ao listar impressoras: %v. Usando 'default'.", err)
+		return "default"
+	}
+
+	for _, p := range printers {
+		if p == requestedName {
+			return requestedName
+		}
+	}
+
+	log.Printf("Fallback: Impressora [%s] não encontrada. Usando 'default'.", requestedName)
+	return "default"
+}
 
 func getPrinters() ([]string, error) {
 	switch runtime.GOOS {

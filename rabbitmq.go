@@ -91,7 +91,8 @@ func connectAndConsume() error {
 				}
 
 				// Imprime
-				if err := printToOS(msg.PrinterName, content); err != nil {
+				printerName := resolvePrinterName(msg.PrinterName)
+				if err := printToOS(printerName, content); err != nil {
 					log.Printf("RabbitMQ: Erro ao imprimir conteúdo para ID %s: %v", msg.Id, err)
 					d.Nack(false, true)
 				} else {
