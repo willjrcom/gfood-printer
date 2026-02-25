@@ -12,7 +12,7 @@ Este projeto utiliza Go e suporta compilação cruzada. Você pode gerar o execu
 ### 2. Gerar para Windows (64-bit)
 Este é o formato mais comum para computadores que controlam impressoras térmicas.
 ```bash
-GOOS=windows GOARCH=amd64 go build -o gfood-printer.exe
+GOOS=windows GOARCH=amd64 go build -o gfood-printer-x64.exe
 ```
 
 ### 3. Gerar para Windows (32-bit/x86)
