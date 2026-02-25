@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/md5"
 	"encoding/json"
+	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -10,14 +13,35 @@ import (
 	"github.com/willjrcom/gfood-printer/internal/service/rabbitmq"
 )
 
+const maxRetries = 3
+
 var (
 	rabbitService *rabbitmq.RabbitMQ
 	stopChan      chan struct{}
+	retryMap      sync.Map
 )
 
 type PrintMessage struct {
 	Path        string `json:"path"`
 	PrinterName string `json:"printer_name"`
+}
+
+// nackWithRetry faz Nack com requeue até maxRetries vezes; depois descarta.
+func nackWithRetry(d amqp.Delivery, label string) {
+	key := fmt.Sprintf("%x", md5.Sum(d.Body))
+	val, _ := retryMap.LoadOrStore(key, 0)
+	count := val.(int)
+
+	if count >= maxRetries {
+		log.Printf("RabbitMQ: Descartando mensagem após %d tentativas [%s]", maxRetries, label)
+		retryMap.Delete(key)
+		d.Nack(false, false)
+		return
+	}
+
+	retryMap.Store(key, count+1)
+	log.Printf("RabbitMQ: Tentativa %d/%d — requeue [%s]", count+1, maxRetries, label)
+	d.Nack(false, true)
 }
 
 func startRabbitMQConsumer() {
@@ -77,16 +101,16 @@ func connectAndConsume() error {
 				var msg PrintMessage
 				if err := json.Unmarshal(d.Body, &msg); err != nil {
 					log.Printf("RabbitMQ: Erro ao decodificar mensagem: %v", err)
-					d.Nack(false, false)
+					d.Nack(false, false) // JSON inválido: descarta direto
 					continue
 				}
 				log.Printf("RabbitMQ: Mensagem recebida para %s: %s", ex, msg.Path)
 
-				// Busca conteúdo via API isolada
+				// Busca conteúdo via API (timeout de 10s interno no http.Client)
 				content, err := api.FetchPrintContent(GlobalConfig, msg.Path)
 				if err != nil {
 					log.Printf("RabbitMQ: Erro ao buscar conteúdo para ID %s: %v", msg.Path, err)
-					d.Nack(false, true) // Requeue em caso de erro de rede/api
+					nackWithRetry(d, msg.Path)
 					continue
 				}
 
@@ -94,9 +118,11 @@ func connectAndConsume() error {
 				printerName := resolvePrinterName(msg.PrinterName)
 				if err := printToOS(printerName, content); err != nil {
 					log.Printf("RabbitMQ: Erro ao imprimir conteúdo para ID %s: %v", msg.Path, err)
-					d.Nack(false, true)
+					nackWithRetry(d, msg.Path)
 				} else {
 					log.Printf("RabbitMQ: Impressão enviada com sucesso para ID: %s", msg.Path)
+					key := fmt.Sprintf("%x", md5.Sum(d.Body))
+					retryMap.Delete(key)
 					d.Ack(false)
 				}
 			}

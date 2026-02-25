@@ -2,53 +2,82 @@
 
 Agente local para gerenciamento de impressões térmicas (ESC/POS) via WebSocket e RabbitMQ.
 
-## 🚀 Como Gerar os Executáveis (Build)
+---
 
-Este projeto utiliza Go e suporta compilação cruzada. Você pode gerar o executável para Windows, Linux ou macOS diretamente da sua máquina.
+## ▶️ Como Rodar
 
-### 1. Pré-requisitos
-- Go 1.20 ou superior instalado.
+### 1. Configure o `config.json`
+Crie um arquivo `config.json` na mesma pasta do executável:
 
-### 2. Gerar para Windows (64-bit)
-Este é o formato mais comum para computadores que controlam impressoras térmicas.
-```bash
-GOOS=windows GOARCH=amd64 go build -o gfood-printer-x64.exe
+```json
+{
+  "rabbitmq_url": "amqp://user:pass@host:5672/",
+  "schema_name": "nome_do_schema",
+  "api_url": "https://api.exemplo.com"
+}
 ```
 
-### 3. Gerar para Windows (32-bit/x86)
-Para máquinas Windows muito antigas ou sistemas de 32 bits:
+### 2. Execute o binário da sua plataforma
+
+**macOS (Apple Silicon — M1/M2/M3):**
 ```bash
-GOOS=windows GOARCH=386 go build -o gfood-printer-x86.exe
+./gfood-printer-mac-arm
 ```
 
-### 4. Gerar para macOS
+**macOS (Intel):**
 ```bash
-# Para Macs com Intel
-GOOS=darwin GOARCH=amd64 go build -o gfood-printer-mac-intel
-
-# Para Macs com Apple Silicon (M1/M2/M3)
-GOOS=darwin GOARCH=arm64 go build -o gfood-printer-mac-arm
+./gfood-printer-mac-intel
 ```
 
-### 5. Gerar para Linux
+**Linux:**
 ```bash
-GOOS=linux GOARCH=amd64 go build -o gfood-printer-linux
+./gfood-printer-linux
+```
+
+**Windows:** dê duplo clique em `gfood-printer-x64.exe` ou execute no terminal:
+```cmd
+gfood-printer-x64.exe
 ```
 
 ---
 
-## 🛠️ Comandos Úteis
+## 🔨 Gerar Executáveis (Build)
 
-### Rodar em modo de desenvolvimento
+### Opção 1 — Script automático (recomendado)
+Gera todos os binários de uma vez na pasta `versions/`:
+```bash
+./build.sh
+```
+
+### Opção 2 — Manual por plataforma
+```bash
+# macOS Apple Silicon
+GOOS=darwin GOARCH=arm64 go build -o versions/gfood-printer-mac-arm
+
+# macOS Intel
+GOOS=darwin GOARCH=amd64 go build -o versions/gfood-printer-mac-intel
+
+# Linux 64-bit
+GOOS=linux GOARCH=amd64 go build -o versions/gfood-printer-linux
+
+# Linux ARM64 (Raspberry Pi)
+GOOS=linux GOARCH=arm64 go build -o versions/gfood-printer-linux-arm64
+
+# Windows 64-bit
+GOOS=windows GOARCH=amd64 go build -o versions/gfood-printer-x64.exe
+
+# Windows 32-bit
+GOOS=windows GOARCH=386 go build -o versions/gfood-printer-x86.exe
+```
+
+### Rodar em modo desenvolvimento
 ```bash
 go run .
 ```
 
-### Limpar e atualizar dependências
-```bash
-go mod tidy
-```
+---
 
 ## 📝 Observações
-- O executável gerado para Windows utiliza a API `winspool.drv` para enviar comandos RAW (ESC/POS).
-- O executável gerado para Unix (Mac/Linux) utiliza o sistema `CUPS` com o flag `-o raw`.
+- **Windows**: usa a API `winspool.drv` para enviar comandos RAW (ESC/POS).
+- **macOS / Linux**: usa o sistema `CUPS` com o flag `-o raw`.
+- Erros de impressão descartam a mensagem da fila imediatamente (sem retry).
