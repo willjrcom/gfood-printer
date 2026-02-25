@@ -16,7 +16,7 @@ var (
 )
 
 type PrintMessage struct {
-	Id          string `json:"id"`
+	Path        string `json:"path"`
 	PrinterName string `json:"printer_name"`
 }
 
@@ -63,7 +63,7 @@ func connectAndConsume() error {
 	}
 
 	// Exchanges (Tópicos) para consumir
-	exchanges := []string{rabbitmq.GROUP_ITEM_EX, rabbitmq.ORDER_EX, rabbitmq.ORDER_DELIVERY_EX}
+	exchanges := []string{rabbitmq.SHIFT_EX, rabbitmq.GROUP_ITEM_EX, rabbitmq.ORDER_EX}
 
 	for _, ex := range exchanges {
 		msgs, err := rabbitService.ConsumeMessages(ex, GlobalConfig.SchemaName)
@@ -80,12 +80,12 @@ func connectAndConsume() error {
 					d.Nack(false, false)
 					continue
 				}
-				log.Printf("RabbitMQ: Mensagem recebida para %s: %s", ex, msg.Id)
+				log.Printf("RabbitMQ: Mensagem recebida para %s: %s", ex, msg.Path)
 
 				// Busca conteúdo via API isolada
-				content, err := api.FetchPrintContent(GlobalConfig, ex, msg.Id)
+				content, err := api.FetchPrintContent(GlobalConfig, msg.Path)
 				if err != nil {
-					log.Printf("RabbitMQ: Erro ao buscar conteúdo para ID %s: %v", msg.Id, err)
+					log.Printf("RabbitMQ: Erro ao buscar conteúdo para ID %s: %v", msg.Path, err)
 					d.Nack(false, true) // Requeue em caso de erro de rede/api
 					continue
 				}
@@ -93,10 +93,10 @@ func connectAndConsume() error {
 				// Imprime
 				printerName := resolvePrinterName(msg.PrinterName)
 				if err := printToOS(printerName, content); err != nil {
-					log.Printf("RabbitMQ: Erro ao imprimir conteúdo para ID %s: %v", msg.Id, err)
+					log.Printf("RabbitMQ: Erro ao imprimir conteúdo para ID %s: %v", msg.Path, err)
 					d.Nack(false, true)
 				} else {
-					log.Printf("RabbitMQ: Impressão enviada com sucesso para ID: %s", msg.Id)
+					log.Printf("RabbitMQ: Impressão enviada com sucesso para ID: %s", msg.Path)
 					d.Ack(false)
 				}
 			}

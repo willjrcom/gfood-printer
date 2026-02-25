@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/willjrcom/gfood-printer/internal/service/rabbitmq"
 )
 
 type Config interface {
@@ -15,18 +13,7 @@ type Config interface {
 	GetBackendURL() string
 }
 
-func FetchPrintContent(config Config, ex, id string) (string, error) {
-	var path string
-	switch ex {
-	case rabbitmq.GROUP_ITEM_EX:
-		path = "/order-print/kitchen/" + id
-	case rabbitmq.ORDER_DELIVERY_EX:
-		// TODO: Confirmar se existe rota específica para delivery ou se usa a mesma de order
-		path = "/order-print/" + id
-	default:
-		path = "/order-print/" + id
-	}
-
+func FetchPrintContent(config Config, path string) (string, error) {
 	url := config.GetBackendURL() + path
 
 	client := &http.Client{Timeout: 10 * time.Second}

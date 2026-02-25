@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	GROUP_ITEM_EX     = "print.group.item"
-	ORDER_EX          = "print.order"
-	ORDER_DELIVERY_EX = "print.order.delivery"
+	SHIFT_EX      = "print.shift"
+	GROUP_ITEM_EX = "print.group.item"
+	ORDER_EX      = "print.order"
 )
 
 // RabbitMQ structure to manage connection and channel
